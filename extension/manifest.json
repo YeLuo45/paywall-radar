@@ -1,0 +1,26 @@
+{
+  "manifest_version": 3,
+  "name": "PaywallRadar CORS Bypass",
+  "version": "1.0.0",
+  "description": "Bypasses CORS restrictions for paywallscreens.com to enable data fetching in PaywallRadar",
+  "permissions": [
+    "*://*.paywallscreens.com/*"
+  ],
+  "host_permissions": [
+    "*://*.paywallscreens.com/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": ["*://*.paywallscreens.com/*"],
+      "js": ["content.js"],
+      "run_at": "document_start",
+      "all_frames": true
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["content.js"],
+      "matches": ["<all_urls>"]
+    }
+  ]
+}
