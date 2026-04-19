@@ -25,47 +25,22 @@ export default function SyncPanel() {
 
     try {
       const totalPages = pagesToFetch;
-      setProgress({ current: 0, total: totalPages, phase: '抓取中...' });
-      addLog(`开始同步: 共 ${totalPages} 页`);
+      const totalAvailable = await paywallScreensProvider.getTotalCount();
+      setProgress({ current: 0, total: totalPages, phase: '加载中...' });
+      addLog(`开始同步: 共 ${totalPages} 页 (共 ${totalAvailable} 个案例可选)`);
 
-      const allRaw: Awaited<ReturnType<typeof paywallScreensProvider.parse>> = [];
+      // Load from bundled JSON — no network request, no CORS
+      const cases: PaywallCase[] = await paywallScreensProvider.loadFromBundled(totalPages);
 
-      for (let page = 1; page <= totalPages; page++) {
-        setProgress((p) => ({ ...p, current: page, phase: `抓取第 ${page}/${totalPages} 页...` }));
-        addLog(`抓取第 ${page}/${totalPages} 页...`);
-
-        const url = paywallScreensProvider.getListingURL(page);
-        try {
-          const html = await paywallScreensProvider.fetch(url);
-          const rawCases = await paywallScreensProvider.parse(html);
-          allRaw.push(...rawCases);
-          addLog(`解析到 ${rawCases.length} 个案例`);
-        } catch (err) {
-          addLog(`第 ${page} 页抓取失败: ${err instanceof Error ? err.message : 'Unknown'}`);
-        }
-
-        // Small delay between pages to be polite
-        if (page < totalPages) {
-          await new Promise((r) => setTimeout(r, 500));
-        }
-      }
-
-      addLog(`共解析 ${allRaw.length} 个原始案例，开始标准化...`);
-      setProgress((p) => ({ ...p, phase: '标准化数据...' }));
-
-      const cases: PaywallCase[] = allRaw.map((raw) =>
-        paywallScreensProvider.normalize(raw)
-      );
-
-      addLog(`标准化完成，存入 IndexedDB...`);
-      setProgress((p) => ({ ...p, phase: '存储中...' }));
+      addLog(`共加载 ${cases.length} 个案例，开始存入 IndexedDB...`);
+      setProgress((p) => ({ ...p, current: totalPages, phase: '存储中...' }));
 
       await db.upsertCases(cases);
 
       const storedCount = await db.getCaseCount();
       addLog(`存储完成！当前数据库共 ${storedCount} 个案例`);
 
-      // Also generate some sample data if DB is empty
+      // Fallback: generate sample data if bundled JSON is missing/empty
       if (storedCount === 0 && cases.length === 0) {
         await generateSampleData();
         addLog('已生成示例数据用于演示');
@@ -143,9 +118,9 @@ export default function SyncPanel() {
           </span>
         </div>
         <div className="status-row">
-          <span className="status-label">CORS 扩展</span>
-          <span className="status-value hint">
-            💡 请确保已安装浏览器扩展以绕过 CORS 限制
+          <span className="status-label">数据来源</span>
+          <span className="status-value">
+            💡 PaywallScreens.com 预抓取数据 · 无需网络请求
           </span>
         </div>
       </div>
@@ -215,18 +190,10 @@ export default function SyncPanel() {
         </div>
       </div>
 
-      <div className="extension-guide">
-        <h4>🔌 浏览器扩展安装指南</h4>
-        <ol>
-          <li>打开 Chrome，进入 <code>chrome://extensions/</code></li>
-          <li>开启右上角「开发者模式」</li>
-          <li>点击「加载解压的扩展程序」</li>
-          <li>选择项目中的 <code>extension/</code> 文件夹</li>
-          <li>扩展激活后刷新页面即可开始抓取</li>
-        </ol>
-        <p className="guide-note">
-          注意：扩展仅在访问 paywallscreens.com 时生效，不会影响其他网站。
-        </p>
+      <div className="sync-info">
+        <h4>ℹ️ 同步说明</h4>
+        <p>数据来自 PaywallScreens.com 的预抓取数据集，每次同步将指定的页数对应的案例写入本地数据库。</p>
+        <p>如需更新数据源，请运行 <code>scripts/scrape-paywall-screens.mjs</code> 或触发 GitHub Actions 工作流。</p>
       </div>
 
       <style>{`
@@ -333,22 +300,22 @@ export default function SyncPanel() {
         }
         .log-box p { margin: 0 0 4px; font-size: 12px; color: #a6e3a1; font-family: monospace; }
         .log-empty { color: #6b7280 !important; }
-        .extension-guide {
-          background: #fffbeb;
-          border: 1px solid #fde68a;
+        .sync-info {
+          background: #eff6ff;
+          border: 1px solid #bfdbfe;
           border-radius: 12px;
           padding: 20px;
         }
-        .extension-guide h4 { font-size: 15px; margin: 0 0 12px; color: #92400e; }
-        .extension-guide ol { margin: 0; padding-left: 20px; color: #78350f; font-size: 14px; line-height: 2; }
-        .extension-guide code {
-          background: #fef3c7;
+        .sync-info h4 { font-size: 15px; margin: 0 0 8px; color: #1e40af; }
+        .sync-info p { font-size: 13px; color: #1e3a8a; margin: 0 0 6px; line-height: 1.5; }
+        .sync-info code {
+          background: #dbeafe;
           padding: 1px 5px;
           border-radius: 3px;
-          font-size: 13px;
+          font-size: 12px;
           font-family: monospace;
+          color: #1e40af;
         }
-        .guide-note { font-size: 12px; color: #a16207; margin: 12px 0 0; }
       `}</style>
     </div>
   );
